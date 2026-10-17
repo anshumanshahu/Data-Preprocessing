@@ -1,0 +1,18 @@
+Name: Anshuman Shahu
+Role: Software Developer
+Progress Report: Vulgar Content Detection Model
+Date: 17 Oct 2026
+
+Objective: Build a model that detects vulgar text and images and saves only clean content to the database.
+
+Ive Completed today
+- Finalized detection categories: Hinglish/English vulgar text; explicit nudity, gore, offensive gestures/hate symbols, and vulgar text inside images (OCR).
+- Selected CPU-friendly models: TF-IDF + Logistic Regression for text; pretrained NSFW classifier, CLIP, and Tesseract OCR for images.
+- Collected multiple Hinglish and English datasets (CSV/TSV).
+- Preprocessed and labeled data into a single format (text, label: 1 = vulgar, 0 = clean); nearly complete.
+
+Next steps
+- Final data quality check and train/test split
+- Model training and evaluation (accuracy, precision, recall)
+
+Status: Data preparation nearly Completed; training is next.
