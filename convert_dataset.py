@@ -2,8 +2,8 @@ import csv
 from pathlib import Path
 
 folder = Path(__file__).resolve().parent
-input_file = folder / "hasoc2019_hi_test_gold_2919.tsv"
-output_file = folder / "hasoc_2019_hindi_output.csv"
+input_file = folder / "hindi_dataset.tsv"
+output_file = folder / "hindi_dataset_output_6.csv"
 
 label_mapping = {
     "NOT": 0,
