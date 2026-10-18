@@ -1,94 +1,114 @@
 
 import csv
+import re
+import html
 from pathlib import Path
 
 folder = Path(__file__).resolve().parent
-input_file = folder / "hate_speech.csv"
-output_file = folder / "output_3.csv"
+input_file = folder / "dataset.csv"
+output_file = folder / "output.csv"
 
 
-def read_csv_file(path):
+def clean_text(text):
+    # Decode HTML entities such as &amp;
+    text = html.unescape(text)
+
+    # Remove URLs
+    text = re.sub(r"https?://\S+|www\.\S+", "", text)
+
+    # Remove hashtags but keep the hashtag word
+    text = re.sub(r"#(\w+)", r"\1", text)
+
+    # Remove user mentions
+    text = re.sub(r"@\w+", "", text)
+
+    # Remove extra whitespace
+    text = re.sub(r"\s+", " ", text).strip()
+
+    return text
+
+
+def read_rows(path):
     for encoding in ("utf-8-sig", "cp1252", "latin-1"):
         try:
             with path.open(
                 "r", encoding=encoding, newline=""
-            ) as file:
-                return list(csv.reader(file, delimiter="\t")), "\t"
+            ) as f:
+                return list(csv.reader(f))
         except UnicodeDecodeError:
             continue
 
-    raise ValueError("Unable to read the input file.")
+    raise ValueError("Could not decode input CSV.")
 
 
 try:
-    # Read file and detect its delimiter
-    with input_file.open("r", encoding="utf-8-sig", errors="replace") as f:
-        sample = f.read(8192)
-
-    try:
-        dialect = csv.Sniffer().sniff(sample, delimiters=",\t;")
-        delimiter = dialect.delimiter
-    except csv.Error:
-        delimiter = "\t" if "\tyes" in sample or "\tno" in sample else ","
-
-    with input_file.open(
-        "r", encoding="utf-8-sig", errors="replace", newline=""
-    ) as file:
-        rows = list(csv.reader(file, delimiter=delimiter))
+    rows = read_rows(input_file)
 
     if not rows:
-        raise ValueError("hate_speech.csv is empty.")
+        raise ValueError("dataset.csv is empty.")
 
-    first_row = [col.strip().lower() for col in rows[0]]
+    first = [x.strip().lower() for x in rows[0]]
 
-    # Identify columns using header names when available
-    if "text" in first_row and ("label" in first_row or "sentiment" in first_row):
-        text_index = first_row.index("text")
-        label_index = (
-            first_row.index("label")
-            if "label" in first_row
-            else first_row.index("sentiment")
-        )
-        rows = rows[1:]
+    # Support a header if present
+    if "text" in first:
+        text_index = first.index("text")
+        label_indexes = [
+            first.index(x)
+            for x in ("label", "label1", "label2")
+            if x in first
+        ]
+
+        if not label_indexes:
+            label_indexes = list(range(len(first) - 2, len(first)))
+
+        data = rows[1:]
     else:
-        # If no header: last column contains yes/no
-        text_index = 0
-        label_index = len(rows[0]) - 1
+        # Sample format: ID, tweet_id, text, label1, label2
+        text_index = 2
+        label_indexes = [3, 4]
+        data = rows
 
-    converted = []
+    count = 0
     skipped = 0
-
-    for row in rows:
-        if len(row) <= max(text_index, label_index):
-            skipped += 1
-            continue
-
-        text = row[text_index].strip()
-        original_label = row[label_index].strip().lower()
-
-        if not text or original_label not in ("yes", "no"):
-            skipped += 1
-            continue
-
-        label = 1 if original_label == "yes" else 0
-        converted.append([text, label])
-
-    if not converted:
-        raise ValueError(
-            "No valid rows found. Check the CSV delimiter and columns."
-        )
 
     with output_file.open(
         "w", encoding="utf-8-sig", newline=""
-    ) as file:
-        writer = csv.writer(file)
+    ) as f:
+        writer = csv.writer(f)
         writer.writerow(["text", "label"])
-        writer.writerows(converted)
+
+        for row in data:
+            if len(row) <= max([text_index] + label_indexes):
+                skipped += 1
+                continue
+
+            text = clean_text(row[text_index])
+
+            labels = {
+                row[i].strip().upper()
+                for i in label_indexes
+            }
+
+            if not text:
+                skipped += 1
+                continue
+
+            # Any harmful category means 1
+            if labels & {"HOF", "PRFN", "OFFN"}:
+                label = 1
+            elif labels & {"NOT", "NONE"}:
+                label = 0
+            else:
+                skipped += 1
+                continue
+
+            writer.writerow([text, label])
+            count += 1
 
     print("Dataset converted successfully!")
-    print(f"Total rows: {len(converted)}")
-    print(f"Skipped rows: {skipped}")
+    print(f"Rows saved: {count}")
+    print(f"Rows skipped: {skipped}")
     print(f"Output: {output_file}")
 
-except (OSError, ValueError, csv.Error) as error:
-    print(f"Error: {error}")
+except (OSError, ValueError, csv.Error) as e:
+    print(f"Error: {e}")
