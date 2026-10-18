@@ -4,8 +4,8 @@ import re
 from pathlib import Path
 
 folder = Path(__file__).resolve().parent
-input_file = folder / "hindi_2019_1.tsv"
-output_file = folder / "hindi_2019_1_output.csv"
+input_file = folder / "hindi_2019_2.tsv"
+output_file = folder / "hindi_2019_2_output.csv"
 
 label_mapping = {
     "NOT": 0,
