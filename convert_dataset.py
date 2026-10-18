@@ -5,8 +5,8 @@ import html
 from pathlib import Path
 
 folder = Path(__file__).resolve().parent
-input_file = folder / "dataset.csv"
-output_file = folder / "output.csv"
+input_file = folder / "en_Hasoc2021_train.csv"
+output_file = folder / "output_4.csv"
 
 
 def clean_text(text):
@@ -45,7 +45,7 @@ try:
     rows = read_rows(input_file)
 
     if not rows:
-        raise ValueError("dataset.csv is empty.")
+        raise ValueError("en_Hasoc2021_train.csv is empty.")
 
     first = [x.strip().lower() for x in rows[0]]
 
