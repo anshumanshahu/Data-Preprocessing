@@ -1,114 +1,60 @@
-
 import csv
-import re
-import html
 from pathlib import Path
 
 folder = Path(__file__).resolve().parent
-input_file = folder / "en_Hasoc2021_train.csv"
-output_file = folder / "output_4.csv"
+input_file = folder / "Hate_Hindi.csv"
+output_file = folder / "Hate_Hindi_output.csv"
 
+label_mapping = {
+    "not offensive": 0,
+    "offensive": 1
+}
 
-def clean_text(text):
-    # Decode HTML entities such as &amp;
-    text = html.unescape(text)
-
-    # Remove URLs
-    text = re.sub(r"https?://\S+|www\.\S+", "", text)
-
-    # Remove hashtags but keep the hashtag word
-    text = re.sub(r"#(\w+)", r"\1", text)
-
-    # Remove user mentions
-    text = re.sub(r"@\w+", "", text)
-
-    # Remove extra whitespace
-    text = re.sub(r"\s+", " ", text).strip()
-
-    return text
-
-
-def read_rows(path):
-    for encoding in ("utf-8-sig", "cp1252", "latin-1"):
-        try:
-            with path.open(
-                "r", encoding=encoding, newline=""
-            ) as f:
-                return list(csv.reader(f))
-        except UnicodeDecodeError:
-            continue
-
-    raise ValueError("Could not decode input CSV.")
-
+total = 0
+skipped = 0
 
 try:
-    rows = read_rows(input_file)
+    with input_file.open("r", encoding="utf-8-sig") as file, \
+         output_file.open("w", encoding="utf-8-sig", newline="") as out:
 
-    if not rows:
-        raise ValueError("en_Hasoc2021_train.csv is empty.")
-
-    first = [x.strip().lower() for x in rows[0]]
-
-    # Support a header if present
-    if "text" in first:
-        text_index = first.index("text")
-        label_indexes = [
-            first.index(x)
-            for x in ("label", "label1", "label2")
-            if x in first
-        ]
-
-        if not label_indexes:
-            label_indexes = list(range(len(first) - 2, len(first)))
-
-        data = rows[1:]
-    else:
-        # Sample format: ID, tweet_id, text, label1, label2
-        text_index = 2
-        label_indexes = [3, 4]
-        data = rows
-
-    count = 0
-    skipped = 0
-
-    with output_file.open(
-        "w", encoding="utf-8-sig", newline=""
-    ) as f:
-        writer = csv.writer(f)
+        writer = csv.writer(out)
         writer.writerow(["text", "label"])
 
-        for row in data:
-            if len(row) <= max([text_index] + label_indexes):
-                skipped += 1
+        for line_number, line in enumerate(file, start=1):
+            line = line.strip()
+
+            if not line:
                 continue
 
-            text = clean_text(row[text_index])
+            try:
+                row = next(csv.reader([line], skipinitialspace=True))
 
-            labels = {
-                row[i].strip().upper()
-                for i in label_indexes
-            }
+                if len(row) != 2:
+                    skipped += 1
+                    print(f"Skipping line {line_number}: invalid format")
+                    continue
 
-            if not text:
+                text = row[0].strip()
+                label_text = row[1].strip().lower()
+
+                if not text or label_text not in label_mapping:
+                    skipped += 1
+                    print(f"Skipping line {line_number}: invalid text or label")
+                    continue
+
+                writer.writerow([text, label_mapping[label_text]])
+                total += 1
+
+            except csv.Error:
                 skipped += 1
-                continue
+                print(f"Skipping line {line_number}: CSV parsing error")
 
-            # Any harmful category means 1
-            if labels & {"HOF", "PRFN", "OFFN"}:
-                label = 1
-            elif labels & {"NOT", "NONE"}:
-                label = 0
-            else:
-                skipped += 1
-                continue
-
-            writer.writerow([text, label])
-            count += 1
-
-    print("Dataset converted successfully!")
-    print(f"Rows saved: {count}")
+    print("\nDataset conversion complete!")
+    print(f"Rows saved: {total}")
     print(f"Rows skipped: {skipped}")
-    print(f"Output: {output_file}")
+    print(f"Output file: {output_file}")
 
-except (OSError, ValueError, csv.Error) as e:
-    print(f"Error: {e}")
+except FileNotFoundError:
+    print(f"Error: {input_file} not found. Create Hate_Hindi.csv first.")
+except OSError as error:
+    print(f"File error: {error}")
