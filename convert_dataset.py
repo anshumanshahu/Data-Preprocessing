@@ -2,59 +2,48 @@ import csv
 from pathlib import Path
 
 folder = Path(__file__).resolve().parent
-input_file = folder / "Hate_Hindi.csv"
-output_file = folder / "Hate_Hindi_output.csv"
+input_file = folder / "hasoc2019_hi_test_gold_2919.tsv"
+output_file = folder / "hasoc_2019_hindi_output.csv"
 
 label_mapping = {
-    "not offensive": 0,
-    "offensive": 1
+    "NOT": 0,
+    "HOF": 1
 }
 
-total = 0
+saved = 0
 skipped = 0
 
 try:
-    with input_file.open("r", encoding="utf-8-sig") as file, \
-         output_file.open("w", encoding="utf-8-sig", newline="") as out:
+    with input_file.open("r", encoding="utf-8-sig", newline="") as infile:
+        reader = csv.DictReader(infile, delimiter="\t")
 
-        writer = csv.writer(out)
-        writer.writerow(["text", "label"])
+        required_columns = {"text", "task_1"}
+        if not reader.fieldnames or not required_columns.issubset(reader.fieldnames):
+            raise ValueError(
+                "Required columns missing. Expected at least: text, task_1"
+            )
 
-        for line_number, line in enumerate(file, start=1):
-            line = line.strip()
+        with output_file.open(
+            "w", encoding="utf-8-sig", newline=""
+        ) as outfile:
+            writer = csv.writer(outfile)
+            writer.writerow(["text", "label"])
 
-            if not line:
-                continue
+            for row in reader:
+                text = (row.get("text") or "").strip()
+                task_label = (row.get("task_1") or "").strip().upper()
 
-            try:
-                row = next(csv.reader([line], skipinitialspace=True))
-
-                if len(row) != 2:
+                if not text or task_label not in label_mapping:
                     skipped += 1
-                    print(f"Skipping line {line_number}: invalid format")
                     continue
 
-                text = row[0].strip()
-                label_text = row[1].strip().lower()
+                writer.writerow([text, label_mapping[task_label]])
+                saved += 1
 
-                if not text or label_text not in label_mapping:
-                    skipped += 1
-                    print(f"Skipping line {line_number}: invalid text or label")
-                    continue
-
-                writer.writerow([text, label_mapping[label_text]])
-                total += 1
-
-            except csv.Error:
-                skipped += 1
-                print(f"Skipping line {line_number}: CSV parsing error")
-
-    print("\nDataset conversion complete!")
-    print(f"Rows saved: {total}")
+    print("Dataset conversion complete!")
+    print(f"Rows saved: {saved}")
     print(f"Rows skipped: {skipped}")
     print(f"Output file: {output_file}")
 
-except FileNotFoundError:
-    print(f"Error: {input_file} not found. Create Hate_Hindi.csv first.")
-except OSError as error:
-    print(f"File error: {error}")
+except (OSError, ValueError, csv.Error) as error:
+    print(f"Error: {error}")
