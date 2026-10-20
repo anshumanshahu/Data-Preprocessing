@@ -1,25 +1,46 @@
 
 import csv
+import html
 import re
 from pathlib import Path
 
 folder = Path(__file__).resolve().parent
-input_file = folder / "hindi_2019_2.tsv"
-output_file = folder / "hindi_2019_2_output.csv"
+input_file = folder / "train.csv"
+output_file = folder / "jigsaw_output.csv"
 
-label_mapping = {
-    "NOT": 0,
-    "HOF": 1
-}
+label_columns = [
+    "toxic",
+    "severe_toxic",
+    "obscene",
+    "threat",
+    "insult",
+    "identity_hate",
+]
 
 def clean_text(text):
-    # Remove URLs and links
-    text = re.sub(r"https?://\S+|www\.\S+", "", text)
+    text = html.unescape(text)
 
-    # Remove extra spaces
+    # Remove URLs
+    text = re.sub(r"https?://\S+|www\.\S+", " ", text)
+
+    # Remove HTML tags
+    text = re.sub(r"<[^>]+>", " ", text)
+
+    # Remove IP addresses
+    text = re.sub(
+        r"\b(?:\d{1,3}\.){3}\d{1,3}\b", " ", text
+    )
+
+    # Remove common leftover wiki navigation phrases
+    text = re.sub(
+        r"\b(?:talk|contribs)\b", " ", text, flags=re.IGNORECASE
+    )
+
+    # Normalize whitespace
     text = re.sub(r"\s+", " ", text).strip()
 
     return text
+
 
 saved = 0
 skipped = 0
@@ -28,45 +49,66 @@ try:
     with input_file.open(
         "r", encoding="utf-8-sig", newline=""
     ) as infile:
+        reader = csv.DictReader(infile)
 
-        reader = csv.DictReader(infile, delimiter="\t")
+        if not reader.fieldnames:
+            raise ValueError("Dataset header is missing.")
 
-        required_columns = {"text", "task_1"}
+        columns = {
+            name.strip().lower(): name
+            for name in reader.fieldnames
+            if name
+        }
 
-        if not reader.fieldnames or not required_columns.issubset(
-            reader.fieldnames
-        ):
+        text_column = (
+            columns.get("comment_text")
+            or columns.get("text")
+            or columns.get("comment")
+        )
+
+        available_labels = [
+            columns[name]
+            for name in label_columns
+            if name in columns
+        ]
+
+        if not text_column or not available_labels:
             raise ValueError(
-                "Missing columns. Expected text and task_1."
+                "Expected comment_text/text and toxicity label columns. "
+                "Use the original dataset CSV with its header."
             )
 
         with output_file.open(
             "w", encoding="utf-8-sig", newline=""
         ) as outfile:
-
             writer = csv.writer(outfile)
             writer.writerow(["text", "label"])
 
             for row in reader:
-                text = clean_text(row.get("text") or "")
-                task_label = (
-                    row.get("task_1") or ""
-                ).strip().upper()
+                text = clean_text(row.get(text_column) or "")
 
-                if not text or task_label not in label_mapping:
+                if not text:
                     skipped += 1
                     continue
 
-                writer.writerow([
-                    text,
-                    label_mapping[task_label]
-                ])
+                values = [
+                    str(row.get(col, "0")).strip()
+                    for col in available_labels
+                ]
+
+                if any(value not in {"0", "1"} for value in values):
+                    skipped += 1
+                    continue
+
+                label = int(any(value == "1" for value in values))
+
+                writer.writerow([text, label])
                 saved += 1
 
-    print("Dataset conversion successful!")
+    print("Dataset cleaned successfully!")
     print(f"Rows saved: {saved}")
     print(f"Rows skipped: {skipped}")
-    print(f"Output file: {output_file}")
+    print(f"Output: {output_file}")
 
 except (OSError, ValueError, csv.Error) as error:
     print(f"Error: {error}")
